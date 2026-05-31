@@ -399,9 +399,20 @@ try{
 if (!process.env.VITEST) {
   try {
     const { normalizeHooksOnStartup } = await import("./hooks/normalize-hooks.mjs");
+    // #738: probe for Bun ≥1.0 and pass the resolved path so the static
+    // hooks/hooks.json rewrite swaps `node` → `bun` (~40-60ms cold-start win
+    // per hook). Probe is wrapped in its own try so resolveHookRuntime
+    // failures (missing build, missing module) never block boot.
+    let jsRuntimePath;
+    try {
+      const { resolveHookRuntime } = await import("./build/runtime.js");
+      const r = resolveHookRuntime();
+      if (r.isBun) jsRuntimePath = r.path;
+    } catch { /* best effort — fall through to nodePath default */ }
     normalizeHooksOnStartup({
       pluginRoot: __dirname,
       nodePath: process.execPath,
+      jsRuntimePath,
       platform: process.platform,
     });
   } catch { /* best effort — never block server startup */ }

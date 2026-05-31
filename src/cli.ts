@@ -1529,12 +1529,22 @@ async function upgrade(opts?: { platform?: string }) {
       // start.mjs continues to call the full `normalizeHooksOnStartup` at the
       // next MCP boot to re-heal plugin.json against the live __dirname.
       try {
-        const mod: { normalizeHooksJsonOnly: (opts: { pluginRoot: string; nodePath: string; platform: string }) => void } =
+        // #738: pass the resolved Bun ≥1.0 path so /ctx-upgrade's hooks.json
+        // rewrite gains the same cold-start win as the boot-time rewrite.
+        // Probe failures fall through to nodePath default.
+        let jsRuntimePath: string | undefined;
+        try {
+          const { resolveHookRuntime } = await import("./runtime.js");
+          const r = resolveHookRuntime();
+          if (r.isBun) jsRuntimePath = r.path;
+        } catch { /* best effort */ }
+        const mod: { normalizeHooksJsonOnly: (opts: { pluginRoot: string; nodePath: string; jsRuntimePath?: string; platform: string }) => void } =
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (await import("../hooks/normalize-hooks.mjs" as any)) as any;
         mod.normalizeHooksJsonOnly({
           pluginRoot,
           nodePath: process.execPath,
+          jsRuntimePath,
           platform: process.platform,
         });
       } catch { /* best effort — never block upgrade */ }
